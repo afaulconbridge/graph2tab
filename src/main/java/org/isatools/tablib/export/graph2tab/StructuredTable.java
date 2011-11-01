@@ -144,7 +144,7 @@ class StructuredTable
 	 * Merges into existing structured tables a set of {@link TabValueGroup}s, typically the values provided with by 
 	 * {@link Node#getTabValues()}, i.e., the contribute that a node gives to the final resulting table.
 	 * For instance, if so fare we have built a (structured) table with the headers: 
-	 * Sample Name, Characteristics [ÊOrganism ], Characteristics [ Organ Part ]Ê and a new node
+	 * Sample Name, Characteristics [ï¿½Organism ], Characteristics [ Organ Part ]ï¿½ and a new node
 	 * arrives that contains: Sample Name, ( Characteristics [ Organism ], ( Term Source REF, ( Term Accession ) ) ), 
 	 * Characteristics [ Sex ] the layer is changed so that it contains the new structure: 
 	 * Sample Name, ( Characteristics [ Organism ], ( Term Source REF, ( Term Accession ) ) ), Characteristics [ Organ Part ],  
@@ -175,7 +175,7 @@ class StructuredTable
 			
 			for ( StructuredTable table: tables )
 			{
-				if ( !rowHeader.equals ( table.getHeader () ) ) continue;
+				if ( rowHeader == null || !rowHeader.equals ( table.getHeader () ) ) continue;
 				if ( table.getRows ().size () < newSize )
 				{
 					// The header is still free for the row being built, so fill it. 
