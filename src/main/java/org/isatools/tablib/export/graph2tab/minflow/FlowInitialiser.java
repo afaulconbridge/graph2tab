@@ -80,8 +80,8 @@ class FlowInitialiser
 {
 	private final FlowManager flowMgr = new FlowManager ();
 	private final Set<Node> nodes;
-	
-	private SortedSet<Node> startNodes;
+
+	private SortedSet<Node> startNodes = new TreeSet<Node> ();
 	private Set<Node> endNodes = new HashSet<Node> ();
 
 	private boolean isInitialised = false;
@@ -95,7 +95,7 @@ class FlowInitialiser
 	{
 		this.nodes = nodes;
 	}
-	
+
 	/**
 	 * The nodes passed to the constructor.
 	 */
@@ -131,14 +131,9 @@ class FlowInitialiser
 	SortedSet<Node> getStartNodes () 
 	{
 		if ( !isInitialised ) initFlow ();
-		
-		if (startNodes == null) {
-			startNodes = new TreeSet<Node> ();
-			for ( Node n: nodes ) findStartNodes ( n );
-		}
 		return startNodes;
 	}
-	
+
 	/**
 	 * Depth-first walk from a given node toward left and through inputs.
 	 * 
@@ -146,14 +141,14 @@ class FlowInitialiser
 	private void findStartNodes ( Node node ) 
 	{
 		Set<Node> ins = node.getInputs ();
-		
+
 		if ( ins.isEmpty () ) {
 			startNodes.add ( node );
 			return;
 		}
-		
+
 		for ( Node in: ins ) findStartNodes ( in );
-		
+
 		return;
 	}
 
@@ -166,7 +161,7 @@ class FlowInitialiser
 		if ( !isInitialised ) initFlow ();
 		return flowMgr;
 	}
-	
+
 	/**
 	 * Initialises the flow by first calling {@link #initFlowRight(Node, Deque)} on all the start nodes, and then 
 	 * calling {@link #initFlowLeft(Node)} on all the nodes returned by the fist method in its dequeue parameter (so, these
@@ -176,12 +171,15 @@ class FlowInitialiser
 	private void initFlow ()
 	{
 		if ( isInitialised ) return;
-		
-		isInitialised = true; // tell getEndNode() to go ahead
-		
+		isInitialised = true;
+
+		// Initialise start-nodes, moved here from getStartNodes(), after Adam Faulconbridge notes about that method's 
+		// performance 
+		for ( Node n: nodes ) findStartNodes ( n );
+
 		Deque<Node> reviewNodes = new LinkedList<Node> ();
-		for ( Node n: getStartNodes () ) initFlowRight ( n, reviewNodes );
-		while ( !reviewNodes.isEmpty () ) initFlowLeft ( reviewNodes.pop () );		
+		for ( Node n: startNodes ) initFlowRight ( n, reviewNodes );
+		while ( !reviewNodes.isEmpty () ) initFlowLeft ( reviewNodes.pop () );
 	}
 
 
@@ -202,13 +200,13 @@ class FlowInitialiser
 	{
 		SortedSet<Node> ins = node.getInputs (), outs = node.getOutputs ();
 		int nins = ins.size (), nouts = outs.size ();
-		
+
 		// End node, end of rightward travel, this includes the rare case of isolated nodes
 		if ( nouts == 0 ) {
 			endNodes.add ( node );
 			return;
 		}	
-		
+
 		// First, saturate the outgoing edges with the minimum flow, unless this was already done in another visit
 		//
 		if ( log.isDebugEnabled () ) log.trace ( "Loading Outputs for '" + node + "'" );
@@ -218,16 +216,16 @@ class FlowInitialiser
 				flowMgr.updateFlow ( node, out, 1 );
 				flowChanged = true;
 		}
-			
+
 		// Then, let's see what deficit we have at the node now 
 		//
 		int deficit = flowMgr.getDeficit ( node );
 		if ( log.isDebugEnabled () ) log.trace ( "Working deficit of " + deficit + " for '" + node + "'" );
-		
+
 		// If nothing happened and the node is balanced, we don't have to go ahead with this path, all the left graph
 		// won't change anyway
 		if ( !flowChanged && deficit == 0 ) return;
-		
+
 		if ( deficit > 0 && nins != 0 )
 		{
 			// If it's not a source (for which the deficit is always >= 0), then 
@@ -241,7 +239,7 @@ class FlowInitialiser
 			// likelihood that we have a minimum flow as soon as the initialisation is finished.
 			//
 			if ( log.isDebugEnabled () ) log.trace ( "Distributing excess of input for '" + node + "'" );
-			
+
 			deficit = -deficit;
 			int dquota = deficit / nouts, rquota = deficit % nouts;
 			for ( Node out: outs )
@@ -265,13 +263,13 @@ class FlowInitialiser
 	private void initFlowLeft ( Node node )
 	{
 		int deficit = flowMgr.getDeficit ( node );
-		
+
 		// 0 means it couldn't initially be balanced (with the flow accumulated up to the point where it was added to 
 		// reviewNodes), but then it was by some other routes. We don't need to continue toward left from this 
 		// particular node, if there is still some unbalanced node on its left graph, it will be dealt with by a call
 		// that picks up that node from reviewNodes (in initFlow() )
 		if ( deficit == 0 ) return;
-		
+
 		// We have a formal proof that this doesn't happen at this point. If it does, it is hardly due to the algorithm on
 		// itself, can be because of underlining reasons (e.g., bad set of initial nodes, problem with Node implementation).
 		//
@@ -281,8 +279,8 @@ class FlowInitialiser
 				"tells us that this never happens, but unfortunately the practice tells us bugs can be everywhere... " +
 				"Check the way you customised graph2tab for your particular use case."
 			);
-		
-		
+
+
 		// deficit > 0
 		// Distribute the excess of outputs over the inputs, so that it spreads toward the sources and the node is balanced
 		//
@@ -290,7 +288,7 @@ class FlowInitialiser
 		int nins = ins.size ();
 		// Source, we've finished and it's normal that deficit > 0 here 
 		if ( nins == 0 ) return; 
-		
+
 		if ( log.isDebugEnabled () ) log.trace ( "Distributing excess of input " + deficit + " for '" + node + "'" );
 
 		// Same approach as above
@@ -305,7 +303,7 @@ class FlowInitialiser
 		for ( Node in: ins ) initFlowLeft ( in );
 	}
 
-	
+
 	/**
 	 * See {@link #outDot(PrintStream, LayersBuilder)}.
 	 *  
@@ -314,8 +312,8 @@ class FlowInitialiser
 	{
 		outDot ( new PrintStream ( new FileOutputStream ( filePath ) ), layersBuilder );
 	}
-	
-	
+
+
 	/**
 	* A facility useful for debugging. Outputs a syntax that can be used by GraphViz to show the graph being built.
 	* The graph will be layered if you pass a LayersBuilder. 
@@ -325,25 +323,25 @@ class FlowInitialiser
 	{
 		Map<Node, Integer> ids = new HashMap<Node, Integer> ();
 		Set<Node> visited = new HashSet<Node> ();
-	
+
 		out.println ( "strict digraph ExperimentalPipeline {" );
 		out.println ( "  graph [rankdir=LR];" );
-	
+
 		for ( Node node: getStartNodes () )
 			outDot ( out, ids, visited, node );
-	
+
 		// Adds up the layers if available
 		if ( layersBuilder != null )
 		{
 			out.println ();
-	
+
 			int maxLayer = layersBuilder.getMaxLayer ();
 			for ( int layer = 0; layer <= maxLayer; layer++ )
 			{
 				Set<Node> lnodes = layersBuilder.getLayerNodes ( layer );
 				if ( lnodes == null || lnodes.isEmpty () )
 					continue;
-	
+
 				out.println ( "    // layer " + layer );
 				out.print ( "    { rank = same" );
 				for ( Node node: lnodes ) {
@@ -354,22 +352,22 @@ class FlowInitialiser
 			}
 			out.println ();
 		}
-	
+
 		out.println ( "}" );
 	}
-	
+
 	/**
 	* @see #outDot(PrintStream, LayersBuilder)
 	*/
 	private void outDot ( PrintStream out, Map<Node, Integer> ids, Set<Node> visited, Node node )
 	{
 		if ( visited.contains ( node ) ) return;
-		
+
 		visited.add ( node );
-	
+
 		// The rainbow can help in tracking the graph manually.
 		final String[] colors = { "black", "red", "blue", "magenta", "green", "orange", "purple", "turquoise" };
-	
+
 		String nodelbl = node.toString ();
 		Integer nodeid = ids.get ( node );
 		if ( nodeid == null )
@@ -380,7 +378,7 @@ class FlowInitialiser
 			out.println ( "  " + nodeid + 
 				"[label = \"" + nodelbl + "\", style = filled, color = " + color + ", fillcolor = white ];" );
 		}
-	
+
 		for ( Node nout: node.getOutputs () )
 		{
 			Integer outid = ids.get ( nout );
@@ -393,12 +391,12 @@ class FlowInitialiser
 				out.println ( "  " + outid + 
 					"[label = \"" + outlbl + "\", style = filled, color = " + color + ", fillcolor = white ];" );
 			}
-	
+
 			String color = colors[ ( nodeid + outid ) % colors.length];
 
 			int arcFlow = flowMgr.getFlow ( node, nout );
 			out.println ( "  " + nodeid + " -> " + outid + "[label = \""+ arcFlow + "\" color = " + color + "];" );
-			
+
 			outDot ( out, ids, visited, nout );
 		}
 	}		
